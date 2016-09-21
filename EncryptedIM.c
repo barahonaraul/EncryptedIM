@@ -169,10 +169,10 @@ int main( int argc, char *argv[] )
   unsigned char K1[16], K2[16];
   unsigned char temp[SHA_DIGEST_LENGTH];
 
-      //Define a message pointer where all final data will be concatenated
-      unsigned char *message;
+  //Define a message pointer where all final data will be concatenated
+  unsigned char *message;
 
-unsigned char *enc_out; //will hold encrypted data
+  unsigned char *enc_out; //will hold encrypted data
   size_t encslength; //size of encryption buffer
   //unsigned char HMAC[];
 	
@@ -227,13 +227,12 @@ unsigned char *enc_out; //will hold encrypted data
     if (FD_ISSET(STDIN_FILENO,&set)) {
       /* process data from stdin */
       bytes_read = read(STDIN_FILENO,buf,BUFSIZE);	
-	printf("bytes read: %d\n",bytes_read);
+      //printf("bytes read: %d\n",bytes_read);
+
       if( bytes_read > 0){
 
       /* Generate IV here */
 	memset(IV,0x0,AES_BLOCK_SIZE);
-
-	
 	RAND_bytes(IV, AES_BLOCK_SIZE); // IV now holds our init vector of 16 bytes
  
       /* Generate HMAC here using K2 and data read */
@@ -243,39 +242,42 @@ unsigned char *enc_out; //will hold encrypted data
       /* Encrypt HMAC + data read Here */ 
 	//Lets see if we can encrypt for now...
     
-    // buffers for encryption
-    encslength = ((bytes_read + AES_BLOCK_SIZE) / AES_BLOCK_SIZE) * AES_BLOCK_SIZE;
-    //unsigned char enc_out[encslength];
-    enc_out = (unsigned char *) malloc(encslength);
-    memset(enc_out, 0, sizeof(enc_out));
+      // buffers for encryption
+      encslength = ((bytes_read + AES_BLOCK_SIZE) / AES_BLOCK_SIZE) * AES_BLOCK_SIZE; //set encryption length
+      //unsigned char enc_out[encslength];
+      enc_out = (unsigned char *) malloc(encslength); //Allocate memory for encrypted data
+      memset(enc_out, 0, sizeof(enc_out)); //zero it out
 
-    message = (unsigned char*) malloc(AES_BLOCK_SIZE + encslength);
-    //printf("size of msg1:%ld\n",sizeof(message));
-    memcpy(message,IV,16);
+      message = (unsigned char*) malloc(AES_BLOCK_SIZE + encslength); //allocate memory for overall message
 
-    // Set up the key and encrypt
-    AES_KEY enc_key;
-    AES_set_encrypt_key(K1, 128, &enc_key);
+      memcpy(message,IV,16); //copy our IV into overall message
 
-    AES_cbc_encrypt(buf, enc_out, bytes_read, &enc_key, IV, AES_ENCRYPT);
-    //hex_print(enc_out,encslength);//print out encrypted generated
-	
+      // Set up the key and encrypt
+      AES_KEY enc_key;
+      AES_set_encrypt_key(K1, 128, &enc_key);
 
-	//hex_print(message,encslength+16);
-	memcpy(message+AES_BLOCK_SIZE,enc_out,encslength);
-	
-	//hex_print(message,encslength+16);
+      AES_cbc_encrypt(buf, enc_out, bytes_read, &enc_key, IV, AES_ENCRYPT);
+      //hex_print(enc_out,encslength);//print out encrypted generated
+
 
       /* Concat IV and Encrypted Data Here and get size of whole */
-      
-	
+      memcpy(message+AES_BLOCK_SIZE,enc_out,encslength); //add encrypted data to overall message	
 
 
       }
-      //printf("size of msg2:%ld\n",sizeof(message));
-      write(conn_sock,message,AES_BLOCK_SIZE + encslength); /* echo it back CHANGE BUFFER AND BYTES READ*/
+       
+      
+      
+      //Free our dynamically allocated memory
+      if( bytes_read > 0){ //quick check so we avoid dumps
+      /* echo it back buffer is message and length is IV length + length of encrypted data*/
+      write(conn_sock,message,AES_BLOCK_SIZE + encslength);
       free(message);
       free(enc_out);
+      }else{
+        break;
+
+      }
     }
     if (FD_ISSET(conn_sock,&set)) {
       /* process data from the connection */
@@ -292,26 +294,31 @@ unsigned char *enc_out; //will hold encrypted data
       /*Get IV (first 16 bytes) from received data */
 
       memset(IV,0x0,AES_BLOCK_SIZE);
-      memcpy(IV, &buf[0], AES_BLOCK_SIZE);
-	//hex_print(buf,BUFSIZE);
+      memcpy(IV, &buf[0], AES_BLOCK_SIZE); //got our IV
+      //hex_print(buf,BUFSIZE);
 
+      //Allocate some memory for encrypted portion of our received data
       unsigned char to_dec[bytes_read - AES_BLOCK_SIZE];
-      memset(to_dec, 0, sizeof(to_dec));
-      printf("br-16:%d\n",bytes_read - AES_BLOCK_SIZE);
+      memset(to_dec, 0, sizeof(to_dec));//zero it out
+
+      //Get encrypted portion
       memcpy(to_dec, &buf[AES_BLOCK_SIZE], bytes_read - AES_BLOCK_SIZE);
       
       //hex_print(to_dec,bytes_read - AES_BLOCK_SIZE);//print out encrypted recieved
 
+      //Allocate memory for where we will store our decryption
       dec_out = (unsigned char *) malloc(bytes_read - AES_BLOCK_SIZE);
-      memset(dec_out, 0, sizeof(dec_out));
+      memset(dec_out, 0, sizeof(dec_out)); //zero it out
       
+      //Set up the key and decrypt 
       AES_KEY dec_key;
       AES_set_decrypt_key(K1, 128, &dec_key);
+      /*Using IV and K1 decrypt rest of the message store into dec_out */
       AES_cbc_encrypt(to_dec, dec_out, bytes_read - AES_BLOCK_SIZE, &dec_key, IV, AES_DECRYPT);
 
-      //printf(" dec:%s\n",dec_out);//it does decrypt!
+      //printf(" dec:%s\n",dec_out);//it does decrypt! We now have the decrypted data!
 
-      /*Using IV decrypt rest of the message */
+      
 
       /* Seperate Decrypted code to get HMAC and decrypted data */
 
