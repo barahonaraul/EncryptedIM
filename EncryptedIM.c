@@ -11,8 +11,11 @@
 #include <openssl/sha.h>
 #include <openssl/aes.h>
 #include <openssl/rand.h>
+#include <openssl/hmac.h>
+#include <openssl/evp.h>
+#include <openssl/engine.h>
 
-#define PORTNO 9869
+#define PORTNO 9879
 #define BUFSIZE 1024
 
 int sock = -1;
@@ -172,6 +175,8 @@ int main( int argc, char *argv[] )
   //Define a message pointer where all final data will be concatenated
   unsigned char *message;
 
+  unsigned char *HM_DAT;// will hold out HMAC and data
+ 
   unsigned char *enc_out; //will hold encrypted data
   size_t encslength; //size of encryption buffer
   //unsigned char HMAC[];
@@ -236,17 +241,29 @@ int main( int argc, char *argv[] )
 	RAND_bytes(IV, AES_BLOCK_SIZE); // IV now holds our init vector of 16 bytes
  
       /* Generate HMAC here using K2 and data read */
+      unsigned char *HMAC_K2;
+      //memset(HMAC_K2,0x0,20);
+
+      HMAC_K2 = HMAC(EVP_sha1(), K2, 16, buf, bytes_read, NULL, NULL);
+      //hex_print(buf,bytes_read);
+      //hex_print(HMAC_K2,20);
+     
 
       /* Concat HMAC with data read */
 
       /* Encrypt HMAC + data read Here */ 
-	//Lets see if we can encrypt for now...
+      HM_DAT = (unsigned char *) malloc(20+bytes_read); //Allocate memory for HMAC + data
+      memset(HM_DAT, 0, 20+bytes_read); //zero it out
+      memcpy(HM_DAT,HMAC_K2,20);
+      memcpy(HM_DAT+20,buf,bytes_read);
     
       // buffers for encryption
-      encslength = ((bytes_read + AES_BLOCK_SIZE) / AES_BLOCK_SIZE) * AES_BLOCK_SIZE; //set encryption length
+      encslength = ((20 + bytes_read + AES_BLOCK_SIZE) / AES_BLOCK_SIZE) * AES_BLOCK_SIZE; //set encryption length
       //unsigned char enc_out[encslength];
       enc_out = (unsigned char *) malloc(encslength); //Allocate memory for encrypted data
-      memset(enc_out, 0, sizeof(enc_out)); //zero it out
+      memset(enc_out, 0, encslength); //zero it out
+
+      
 
       message = (unsigned char*) malloc(AES_BLOCK_SIZE + encslength); //allocate memory for overall message
 
@@ -256,11 +273,11 @@ int main( int argc, char *argv[] )
       AES_KEY enc_key;
       AES_set_encrypt_key(K1, 128, &enc_key);
 
-      AES_cbc_encrypt(buf, enc_out, bytes_read, &enc_key, IV, AES_ENCRYPT);
+      AES_cbc_encrypt(HM_DAT, enc_out, 20+bytes_read, &enc_key, IV, AES_ENCRYPT);
       //hex_print(enc_out,encslength);//print out encrypted generated
 
 
-      /* Concat IV and Encrypted Data Here and get size of whole */
+      /* Concat IV and Encrypted Data Here */
       memcpy(message+AES_BLOCK_SIZE,enc_out,encslength); //add encrypted data to overall message	
 
 
@@ -274,6 +291,7 @@ int main( int argc, char *argv[] )
       write(conn_sock,message,AES_BLOCK_SIZE + encslength);
       free(message);
       free(enc_out);
+      free(HM_DAT);
       }else{
         break;
 
@@ -318,9 +336,25 @@ int main( int argc, char *argv[] )
 
       //printf(" dec:%s\n",dec_out);//it does decrypt! We now have the decrypted data!
 
-      
+      unsigned int message_size = bytes_read - 36;//( ( (bytes_read - AES_BLOCK_SIZE) / AES_BLOCK_SIZE) * AES_BLOCK_SIZE) - 20 - AES_BLOCK_SIZE;
 
       /* Seperate Decrypted code to get HMAC and decrypted data */
+
+      unsigned char sent_hmac[20];
+      unsigned char *HMAC_K2;
+      memcpy(sent_hmac, &dec_out[0], 20);
+      hex_print(sent_hmac,20);
+      message = (unsigned char *) malloc(message_size);
+      memcpy(message,&dec_out[20],message_size);
+
+      HMAC_K2 = HMAC(EVP_sha1(), K2, 16, message, message_size, NULL, NULL);
+      //hex_print(message, message_size);
+      //hex_print(HMAC_K2,20);
+
+      /*if(memcmp(HMAC_K2,sent_hmac, 20) != 0){
+ 	printf("Error HMAC was incorrect!\n");
+	exit(1);
+      }*/
 
       /* Regenerate HMAC using K2 and decrypted data and compare to decrypted HMAC, if good HMAC then do nohing 
 	(if bad HMAC msg and quit)*/
@@ -332,8 +366,9 @@ int main( int argc, char *argv[] )
 
 
       }
-      write(STDOUT_FILENO,dec_out,bytes_read - AES_BLOCK_SIZE); /* write received data to stdout CHANGE BUFFER AND BYTES READ*/
+      write(STDOUT_FILENO,message,bytes_read - AES_BLOCK_SIZE - 20); /* write received data to stdout CHANGE BUFFER AND BYTES READ*/
       free(dec_out);
+      free(message);
     }
   }
 
