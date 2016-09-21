@@ -171,6 +171,8 @@ int main( int argc, char *argv[] )
 
       //Define a message pointer where all final data will be concatenated
       unsigned char *message;
+
+unsigned char *enc_out; //will hold encrypted data
   size_t encslength; //size of encryption buffer
   //unsigned char HMAC[];
 	
@@ -243,11 +245,12 @@ int main( int argc, char *argv[] )
     
     // buffers for encryption
     encslength = ((bytes_read + AES_BLOCK_SIZE) / AES_BLOCK_SIZE) * AES_BLOCK_SIZE;
-    unsigned char enc_out[encslength];
+    //unsigned char enc_out[encslength];
+    enc_out = (unsigned char *) malloc(encslength);
     memset(enc_out, 0, sizeof(enc_out));
 
     message = (unsigned char*) malloc(AES_BLOCK_SIZE + encslength);
-    printf("size of msg1:%ld\n",sizeof(message));
+    //printf("size of msg1:%ld\n",sizeof(message));
     memcpy(message,IV,16);
 
     // Set up the key and encrypt
@@ -255,7 +258,7 @@ int main( int argc, char *argv[] )
     AES_set_encrypt_key(K1, 128, &enc_key);
 
     AES_cbc_encrypt(buf, enc_out, bytes_read, &enc_key, IV, AES_ENCRYPT);
-
+    //hex_print(enc_out,encslength);//print out encrypted generated
 	
 
 	//hex_print(message,encslength+16);
@@ -269,14 +272,15 @@ int main( int argc, char *argv[] )
 
 
       }
-      printf("size of msg2:%ld\n",sizeof(message));
+      //printf("size of msg2:%ld\n",sizeof(message));
       write(conn_sock,message,AES_BLOCK_SIZE + encslength); /* echo it back CHANGE BUFFER AND BYTES READ*/
       free(message);
+      free(enc_out);
     }
     if (FD_ISSET(conn_sock,&set)) {
       /* process data from the connection */
       bytes_read = read(conn_sock,buf,BUFSIZE);
-      printf("bytes read rec: %d\n",bytes_read);
+      //printf("bytes read rec: %d\n",bytes_read);
       unsigned char *dec_out;
 
       if (bytes_read == 0) {
@@ -295,7 +299,8 @@ int main( int argc, char *argv[] )
       memset(to_dec, 0, sizeof(to_dec));
       printf("br-16:%d\n",bytes_read - AES_BLOCK_SIZE);
       memcpy(to_dec, &buf[AES_BLOCK_SIZE], bytes_read - AES_BLOCK_SIZE);
-      //hex_print(to_dec,bytes_read - AES_BLOCK_SIZE);
+      
+      //hex_print(to_dec,bytes_read - AES_BLOCK_SIZE);//print out encrypted recieved
 
       dec_out = (unsigned char *) malloc(bytes_read - AES_BLOCK_SIZE);
       memset(dec_out, 0, sizeof(dec_out));
@@ -303,6 +308,8 @@ int main( int argc, char *argv[] )
       AES_KEY dec_key;
       AES_set_decrypt_key(K1, 128, &dec_key);
       AES_cbc_encrypt(to_dec, dec_out, bytes_read - AES_BLOCK_SIZE, &dec_key, IV, AES_DECRYPT);
+
+      //printf(" dec:%s\n",dec_out);//it does decrypt!
 
       /*Using IV decrypt rest of the message */
 
@@ -318,7 +325,7 @@ int main( int argc, char *argv[] )
 
 
       }
-      write(STDOUT_FILENO,dec_out,sizeof(dec_out)); /* write received data to stdout CHANGE BUFFER AND BYTES READ*/
+      write(STDOUT_FILENO,dec_out,bytes_read - AES_BLOCK_SIZE); /* write received data to stdout CHANGE BUFFER AND BYTES READ*/
       free(dec_out);
     }
   }
