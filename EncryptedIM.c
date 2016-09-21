@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <signal.h>
+#include <openssl/sha.h>
 
 
 #define PORTNO 9999
@@ -48,15 +49,20 @@ int max(int a, int b)
  */ 
 char *parse_command_line( int argc, char *argv[] )
 {
-  const char *usage = "Usage: UnencryptedIM -s|-c hostname";
-  if (argc < 2 ) {
+  const char *usage = "Usage: UnencryptedIM -s|-c hostname [-confkey K1] [-authkey K2]";
+  if (argc < 6 ) {
     printf( "%s\n\n", usage );
     exit(1);
   }
   if( strcmp(argv[1],"-s") == 0 ) {
+    if ((strcmp(argv[2],"-confkey") != 0) || (strcmp(argv[4],"-authkey") != 0)){
+        printf( "%s\n\n", usage ); 
+        exit(1);
+    }
+
     return NULL;		/* start in server mode */
-  } else if ((argc != 3) || (strcmp(argv[1],"-c") != 0)) {
-    printf( "%s\n\n", usage );
+  } else if ((argc != 6) || (strcmp(argv[1],"-c") != 0) || (strcmp(argv[3],"-confkey") != 0) || (strcmp(argv[5],"-authkey") != 0)) {
+    printf( "%s\n\n", usage ); 
     exit(1);
   }
   return argv[2];
@@ -118,6 +124,21 @@ int wait_for_client( int sock )
   return newsockfd;
 }
 
+/* This function takes as input::
+	temp: a 20 byte temporary unsigned char array that will hold whole hash
+	str: the string we are trying to hash
+   This function stores our 16byte hash value to::
+	sha16b
+*/
+ 
+void SHA1_16BYTES(unsigned char *sha16b, unsigned char *temp, char *str){
+
+    memset(temp, 0x0, SHA_DIGEST_LENGTH);
+
+    SHA1((unsigned char *)str, strlen(str), temp);
+    memcpy(sha16b, temp, SHA_DIGEST_LENGTH-4);
+
+} 
 
 
 
@@ -128,6 +149,7 @@ int main( int argc, char *argv[] )
   int bytes_read;
   fd_set set;
   int nfds;
+	
 
   /* set up signal handler to deal with CTRL-C */
   signal( SIGINT, stop_and_exit );
@@ -150,6 +172,7 @@ int main( int argc, char *argv[] )
     conn_sock = connect_to_client(sock,client);
   }
 
+  /* Get HASH values for K1 and K2 here */
 
   
   while( 1 ) {
@@ -169,7 +192,25 @@ int main( int argc, char *argv[] )
     if (FD_ISSET(STDIN_FILENO,&set)) {
       /* process data from stdin */
       bytes_read = read(STDIN_FILENO,buf,BUFSIZE);
-      write(conn_sock,buf,bytes_read); /* echo it back */
+
+      if( bytes_read > 0){
+
+      /* Generate IV here */
+
+      /* Generate HMAC here using K2 and data read */
+
+      /* Concat HMAC with data read */
+
+      /* Encrypt HMAC + data read Here */
+
+      /* Concat IV and Encrypted Data Here and get size of whole */
+      
+
+
+
+      }
+
+      write(conn_sock,buf,bytes_read); /* echo it back CHANGE BUFFER AND BYTES READ*/
     }
     if (FD_ISSET(conn_sock,&set)) {
       /* process data from the connection */
@@ -178,7 +219,24 @@ int main( int argc, char *argv[] )
 	/* end-of-file! */
 	break;
       }
-      write(STDOUT_FILENO,buf,bytes_read); /* write received data to stdout */
+      else{
+
+      /*break up IV (first 16 bytes) from encryted message */
+
+      /*Using IV decrypt rest of the message */
+
+      /* Seperate Decrypted code to get HMAC and decrypted data */
+
+      /* Generate HMAC using K2 and compare to decrypted value if good HMAC then do nohing (if bad HMAC msg and quit)*/
+
+      
+      /* set data to be printed in a buffer */
+
+
+
+
+      }
+      write(STDOUT_FILENO,buf,bytes_read); /* write received data to stdout CHANGE BUFFER AND BYTES READ*/
     }
   }
 
