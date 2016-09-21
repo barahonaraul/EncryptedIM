@@ -221,7 +221,7 @@ int main( int argc, char *argv[] )
       }
       else{
 
-      /*break up IV (first 16 bytes) from encryted message */
+      /*Get IV (first 16 bytes) from received data */
 
       /*Using IV decrypt rest of the message */
 
